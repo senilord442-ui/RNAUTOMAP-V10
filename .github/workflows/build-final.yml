@@ -16,7 +16,8 @@ jobs:
       ANDROID_HOME: /usr/local/lib/android/sdk
 
     steps:
-      - name: Checkout
+
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Setup Java 17
@@ -62,16 +63,19 @@ jobs:
 
           ZIP_FILE="$GITHUB_WORKSPACE/RNAUTOMAP-JUKEN-V11.1.6-BUILDFIX-SOURCE.zip"
 
-          test -f "$ZIP_FILE"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: ZIP V11.1.6 tidak ditemukan."
+            echo "File yang tersedia:"
+            find "$GITHUB_WORKSPACE" -maxdepth 2 -type f -print
+            exit 1
+          fi
 
           rm -rf "$GITHUB_WORKSPACE/source"
           mkdir -p "$GITHUB_WORKSPACE/source"
 
           unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/source"
 
-          echo "=== SOURCE ==="
-          find "$GITHUB_WORKSPACE/source" -maxdepth 3 -type f \
-            \( -name "settings.gradle" -o -name "build.gradle" \) -print
+          echo "SOURCE BERHASIL DIEKSTRAK"
 
       - name: Detect Android project
         shell: bash
@@ -85,7 +89,7 @@ jobs:
             | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: project Android tidak ditemukan"
+            echo "ERROR: settings.gradle tidak ditemukan."
             exit 1
           fi
 
@@ -118,11 +122,10 @@ jobs:
           gradle-version: '8.9'
 
       - name: Check Gradle
-        shell: bash
         run: |
           gradle --version
 
-      - name: Clean
+      - name: Clean project
         shell: bash
         run: |
           set -e
@@ -149,25 +152,44 @@ jobs:
 
           PROJECT_DIR=$(cat "$GITHUB_WORKSPACE/project_dir.txt")
 
+          echo "======================================"
+          echo "MENCARI APK HASIL BUILD"
+          echo "======================================"
+
+          find "$PROJECT_DIR/app/build/outputs/apk" \
+            -type f \
+            -name "*.apk" \
+            -print
+
           APK=$(find "$PROJECT_DIR/app/build/outputs/apk" \
             -type f \
             -name "*.apk" \
             | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK tidak ditemukan"
+            echo "ERROR: APK tidak ditemukan."
             exit 1
           fi
 
+          echo "$APK" > "$GITHUB_WORKSPACE/apk_path.txt"
+
+          echo ""
           echo "======================================"
-          echo "BUILD BERHASIL"
+          echo "APK BERHASIL DIBUAT"
           echo "======================================"
 
           ls -lh "$APK"
 
-      - name: Upload APK
+      - name: Upload FINAL APK
         uses: actions/upload-artifact@v4
         with:
           name: RNAUTOMAP-V11.1.6-FINAL-APK
-          path: source/**/app/build/outputs/apk/*.apk
+          path: ${{ github.workspace }}/source/**/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+
+      - name: Build complete
+        run: |
+          echo "======================================"
+          echo "RNAUTOMAP V11.1.6 SELESAI"
+          echo "======================================"
+          echo "APK sudah tersedia di Artifacts."
