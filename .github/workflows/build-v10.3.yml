@@ -21,34 +21,61 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
+      - name: Cari ZIP V11
         shell: bash
         run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          ZIP=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
 
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          if [ -z "$ZIP" ]; then
+            echo "ZIP V11 tidak ditemukan."
+            ls -la
+            exit 1
+          fi
 
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+          echo "ZIP ditemukan: $ZIP"
+          echo "SOURCE_ZIP=$ZIP" >> "$GITHUB_ENV"
 
-      - name: Check V11 source
+      - name: Extract ZIP V11
+        shell: bash
+        run: |
+          rm -rf source
+          mkdir -p source
+
+          unzip -q "$SOURCE_ZIP" -d source
+
+          echo "=== HASIL EXTRACT ==="
+          find source -maxdepth 3 -type f | sort
+
+      - name: Cari folder project Android
+        shell: bash
+        run: |
+          PROJECT_DIR=$(find source -type f \
+            -name "settings.gradle" \
+            -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "settings.gradle tidak ditemukan."
+            find source -maxdepth 5 -type f | sort
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Cek source V11
         shell: bash
         run: |
           echo "=== PROJECT ==="
-          ls -la
+          ls -la "$PROJECT_DIR"
 
           echo "=== APP ==="
-          find app -maxdepth 5 -type f | sort
+          find "$PROJECT_DIR/app" -maxdepth 5 -type f | sort
 
-          echo "=== CHECK ASSETS ==="
-
-          test -f app/src/main/assets/app.html
-          test -f app/src/main/assets/kalkulator-peta-ecu.html
+          test -f "$PROJECT_DIR/app/src/main/assets/app.html"
+          test -f "$PROJECT_DIR/app/src/main/assets/kalkulator-peta-ecu.html"
 
           echo "app.html OK"
-          echo "kalkulator-peta-ecu.html OK"
+          echo "kalkulator OK"
 
       - name: Install Gradle 8.7
         shell: bash
@@ -61,29 +88,25 @@ jobs:
 
           unzip -q /tmp/gradle.zip -d /tmp
 
-          /tmp/gradle-8.7/bin/gradle --version
-
-      - name: Build V11 Debug APK
+      - name: Build APK V11
         shell: bash
         run: |
+          cd "$PROJECT_DIR"
+
           /tmp/gradle-8.7/bin/gradle \
             --no-daemon \
             --stacktrace \
             assembleDebug
 
-      - name: Check APK
+      - name: Cek APK
         shell: bash
         run: |
-          echo "=== APK ==="
-          ls -lh app/build/outputs/apk/debug/
+          ls -lh "$PROJECT_DIR/app/build/outputs/apk/debug/"
+          test -f "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
-          test -f app/build/outputs/apk/debug/app-debug.apk
-
-          echo "APK BERHASIL DIBUAT"
-
-      - name: Upload V11 APK
+      - name: Upload APK V11
         uses: actions/upload-artifact@v4
         with:
           name: RNAUTOMAP-JUKEN-V11-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
