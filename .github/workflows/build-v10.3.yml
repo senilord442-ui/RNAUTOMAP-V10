@@ -17,85 +17,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Prepare Android SDK
+      - name: Setup Android SDK
         shell: bash
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
-
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
-
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Cari ZIP Source V10.3
-        shell: bash
-        run: |
-          ZIP="$(find . -maxdepth 2 -type f \( \
-            -name 'RNAUTOMAP-V10.3-SOURCE-FIXED.zip' -o \
-            -name 'RNAUTOMAP-V10.3-SOURCE.zip' \
-          \) | head -n 1)"
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: ZIP source V10.3 tidak ditemukan."
-            find . -maxdepth 2 -type f | sort
-            exit 1
-          fi
-
-          echo "SOURCE_ZIP=$ZIP" >> "$GITHUB_ENV"
-          echo "ZIP ditemukan: $ZIP"
-
-      - name: Extract Source V10.3
-        shell: bash
-        run: |
-          rm -rf source
-          mkdir -p source
-
-          unzip -q "$SOURCE_ZIP" -d source
-
-          PROJECT_DIR="$(find source -type f \( \
-            -name 'settings.gradle' -o \
-            -name 'settings.gradle.kts' \
-          \) -print -quit | xargs -r dirname)"
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle tidak ditemukan."
-            find source -maxdepth 4 -type f | sort
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project ditemukan: $PROJECT_DIR"
-
-      - name: Install Gradle 8.7
-        shell: bash
-        run: |
-          curl -fsSL \
-            -o /tmp/gradle.zip \
-            https://services.gradle.org/distributions/gradle-8.7-bin.zip
-
-          rm -rf /tmp/gradle-8.7
-          unzip -q /tmp/gradle.zip -d /tmp
-
-      - name: Build V10.3 Debug APK
-        shell: bash
-        run: |
-          cd "$PROJECT_DIR"
-
-          /tmp/gradle-8.7/bin/gradle \
-            --no-daemon \
-            --stacktrace \
-            assembleDebug
-
-      - name: Upload APK V10.3
-        uses: actions/upload-artifact@v4
-        with:
-          name: RNAUTOMAP-V10.3-debug-apk
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          echo "$
