@@ -22,9 +22,73 @@ jobs:
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
 
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$
+      - name: Cari source V10.3
+        shell: bash
+        run: |
+          ZIP=""
+
+          if [ -f "RNAUTOMAP-V10.3-SOURCE-FIXED2.zip" ]; then
+            ZIP="RNAUTOMAP-V10.3-SOURCE-FIXED2.zip"
+          elif [ -f "RNAUTOMAP-V10.3-SOURCE-FIXED.zip" ]; then
+            ZIP="RNAUTOMAP-V10.3-SOURCE-FIXED.zip"
+          elif [ -f "RNAUTOMAP-V10.3-SOURCE.zip" ]; then
+            ZIP="RNAUTOMAP-V10.3-SOURCE.zip"
+          fi
+
+          if [ -z "$ZIP" ]; then
+            echo "Source V10.3 tidak ditemukan."
+            exit 1
+          fi
+
+          echo "ZIP=$ZIP"
+          echo "SOURCE_ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Extract source V10.3
+        shell: bash
+        run: |
+          rm -rf source
+          mkdir -p source
+
+          unzip -q "$SOURCE_ZIP" -d source
+
+          PROJECT_DIR=$(find source -type f \
+            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "settings.gradle tidak ditemukan."
+            find source -maxdepth 4 -type f
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Install Gradle 8.7
+        shell: bash
+        run: |
+          curl -L \
+            -o /tmp/gradle.zip \
+            https://services.gradle.org/distributions/gradle-8.7-bin.zip
+
+          unzip -q /tmp/gradle.zip -d /tmp
+
+      - name: Build APK V10.3
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          /tmp/gradle-8.7/bin/gradle \
+            --no-daemon \
+            --stacktrace \
+            assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RNAUTOMAP-V10.3-debug-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
