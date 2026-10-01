@@ -1,15 +1,17 @@
-name: Build RNAUTOMAP JUKEN V11
+name: Build RNAUTOMAP JUKEN
 
 on:
   workflow_dispatch:
   push:
     branches:
       - utama
-      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout source
@@ -19,100 +21,51 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      - name: Cari ZIP V11
-        shell: bash
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
         run: |
-          ZIP=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+          sdkmanager "platform-tools" \
+                     "platforms;android-35" \
+                     "build-tools;35.0.0"
 
-          if [ -z "$ZIP" ]; then
-            echo "ZIP V11 tidak ditemukan."
-            ls -la
-            exit 1
-          fi
-
-          echo "ZIP ditemukan: $ZIP"
-          echo "SOURCE_ZIP=$ZIP" >> "$GITHUB_ENV"
-
-      - name: Extract ZIP V11
-        shell: bash
-        run: |
-          rm -rf source
-          mkdir -p source
-
-          unzip -q "$SOURCE_ZIP" -d source
-
-          echo "=== HASIL EXTRACT ==="
-          find source -maxdepth 3 -type f | sort
-
-      - name: Cari folder project Android
-        shell: bash
-        run: |
-          PROJECT_DIR=$(find source -type f \
-            -name "settings.gradle" \
-            -print -quit | xargs -r dirname)
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "settings.gradle tidak ditemukan."
-            find source -maxdepth 5 -type f | sort
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Cek source V11
-        shell: bash
+      - name: Check project
         run: |
           echo "=== PROJECT ==="
-          ls -la "$PROJECT_DIR"
-
+          ls -la
           echo "=== APP ==="
-          find "$PROJECT_DIR/app" -maxdepth 5 -type f | sort
+          ls -la app
+          echo "=== GRADLE ==="
+          ls -la gradle || true
+          test -f settings.gradle
+          test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/assets/app.html
+          test -f app/src/main/assets/kalkulator-peta-ecu.html
+          test -f app/src/main/java/com/rnautomap/juken/MainActivity.java
 
-          test -f "$PROJECT_DIR/app/src/main/assets/app.html"
-          test -f "$PROJECT_DIR/app/src/main/assets/kalkulator-peta-ecu.html"
+      - name: Make Gradle executable
+        run: chmod +x gradlew
 
-          echo "app.html OK"
-          echo "kalkulator OK"
+      - name: Clean
+        run: ./gradlew clean --no-daemon
 
-      - name: Install Gradle 8.9
-        shell: bash
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
         run: |
-          curl -L \
-            -o /tmp/gradle.zip \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          echo "=== APK RESULT ==="
+          find app/build/outputs/apk -type f -name "*.apk" -print
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
 
-          rm -rf /tmp/gradle-8.9
-
-          unzip -q /tmp/gradle.zip -d /tmp
-
-          /tmp/gradle-8.9/bin/gradle --version
-
-      - name: Build APK V11
-        shell: bash
-        run: |
-          cd "$PROJECT_DIR"
-
-          /tmp/gradle-8.9/bin/gradle \
-            --no-daemon \
-            --stacktrace \
-            assembleDebug
-
-      - name: Cek APK
-        shell: bash
-        run: |
-          echo "=== APK ==="
-          ls -lh "$PROJECT_DIR/app/build/outputs/apk/debug/"
-
-          test -f "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-
-          echo "APK BERHASIL DIBUAT"
-
-      - name: Upload APK V11
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-JUKEN-V11-debug-apk
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: RNAUTOMAP-V11.1.5-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
