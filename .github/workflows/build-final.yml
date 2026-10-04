@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   build:
-    name: Build APK RNAUTOMAP V11.1.13
-    runs-on: ubuntu-latest
+    name: Build RNAUTOMAP APK
+    runs-on: ubuntu-22.04
 
     steps:
 
@@ -30,46 +30,29 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Cari Source V11.1.13
+      - name: Cari Android Project
         shell: bash
         run: |
           set -e
 
-          echo "=== Mencari source RNAUTOMAP V11.1.13 ==="
+          echo "=== CARI PROJECT ANDROID ==="
 
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
+          SETTINGS=$(find "$GITHUB_WORKSPACE" \
             -type f \
-            -name 'RNAUTOMAP-V11.1.13-ECU-LIVE-PROTOCOL-FIX.zip' \
-            | head -n 1)
+            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            -print -quit)
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP V11.1.13 tidak ditemukan."
-            echo ""
-            echo "File ZIP yang ditemukan:"
-            find "$GITHUB_WORKSPACE" -type f -name '*.zip' -print
-            exit 1
-          fi
-
-          echo "ZIP ditemukan:"
-          echo "$ZIP_FILE"
-
-          rm -rf "$GITHUB_WORKSPACE/source"
-          mkdir -p "$GITHUB_WORKSPACE/source"
-
-          unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/source"
-
-          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/source" \
-            -type f \
-            \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) \
-            -exec dirname {} \; \
-            | head -n 1)
-
-          if [ -z "$PROJECT_DIR" ]; then
+          if [ -z "$SETTINGS" ]; then
             echo "ERROR: settings.gradle tidak ditemukan."
+            echo ""
+            echo "Isi repository:"
+            find "$GITHUB_WORKSPACE" -maxdepth 4 -type f | sort
             exit 1
           fi
 
-          echo "Project:"
+          PROJECT_DIR=$(dirname "$SETTINGS")
+
+          echo "Project ditemukan:"
           echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
@@ -81,7 +64,7 @@ jobs:
 
           cd "$PROJECT_DIR"
 
-          echo "=== CEK FILE PROJECT ==="
+          echo "=== CEK SOURCE ==="
 
           test -f settings.gradle
           test -f build.gradle
@@ -91,7 +74,7 @@ jobs:
           test -f app/src/main/assets/app.html
           test -f app/src/main/assets/kalkulator-peta-ecu.html
 
-          echo "Semua file utama ditemukan."
+          echo "SOURCE OK"
 
       - name: Cek Protocol JUKEN
         shell: bash
@@ -100,50 +83,37 @@ jobs:
 
           cd "$PROJECT_DIR"
 
-          echo "=== CEK BLUETOOTH JUKEN ==="
+          echo "=== CEK PROTOCOL JUKEN ==="
 
           grep -q '00001101-0000-1000-8000-00805F9B34FB' \
             app/src/main/java/com/rnautomap/juken/MainActivity.java
 
-          echo "SPP UUID OK"
-
-          grep -q '160A' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          echo "LIVE START 160A ditemukan"
-
-          grep -q '160B' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          echo "LIVE STOP 160B ditemukan"
-
           grep -q '1606' \
             app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          echo "ECU IDENTIFICATION 1606 ditemukan"
 
           grep -q '1616' \
             app/src/main/java/com/rnautomap/juken/MainActivity.java
 
-          echo "ECU ID REQUEST 1616 ditemukan"
-
           grep -q '1500' \
             app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          echo "9500 response handling ditemukan"
 
           grep -q '1B00' \
             app/src/main/java/com/rnautomap/juken/MainActivity.java
 
-          echo "1B00 ditemukan"
+          grep -q '160A' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
 
-          echo "Protocol check PASS."
+          grep -q '160B' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
 
-      - name: Build Debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
+          echo "JUKEN PROTOCOL CHECK PASS"
+
+      - name: Build APK
         shell: bash
         run: |
           set -e
+
+          cd "$PROJECT_DIR"
 
           echo "=== BUILD APK ==="
 
@@ -151,19 +121,7 @@ jobs:
             --no-daemon \
             --stacktrace
 
-      - name: Cari APK Hasil Build
-        shell: bash
-        run: |
-          set -e
-
-          echo "=== APK HASIL BUILD ==="
-
-          find "$PROJECT_DIR/app/build/outputs" \
-            -type f \
-            -name '*.apk' \
-            -print
-
-      - name: Pastikan APK Ada
+      - name: Verify APK
         shell: bash
         run: |
           set -e
@@ -175,7 +133,10 @@ jobs:
             exit 1
           fi
 
-          echo "APK ditemukan:"
+          echo "================================"
+          echo "BUILD BERHASIL"
+          echo "================================"
+
           ls -lh "$APK"
 
           echo ""
