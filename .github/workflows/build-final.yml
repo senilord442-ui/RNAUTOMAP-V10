@@ -1,125 +1,60 @@
-name: Build RNAUTOMAP APK
+name: Build RNAUTOMAP V11.1.12 FIX
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Extract FIX source
+        shell: bash
+        run: |
+          rm -rf build-src
+          mkdir -p build-src
+          unzip -q "RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX.zip" -d build-src
+
+          test -f build-src/settings.gradle
+          test -f build-src/app/build.gradle
+          test -f build-src/app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract V11.1.12 ZIP
-        shell: bash
-        run: |
-          set -e
-
-          ZIP_FILE=$(find . -type f \
-            -name 'RNAUTOMAP-JUKEN-V11.1.12-ECU-DATA-AUTOTUNE.zip' \
-            -print -quit)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP V11.1.12 tidak ditemukan."
-            exit 1
-          fi
-
-          echo "ZIP ditemukan: $ZIP_FILE"
-
-          rm -rf _android_project
-          mkdir -p _android_project
-
-          unzip -q "$ZIP_FILE" -d _android_project
-
-          echo "Isi project:"
-          find _android_project -type f \
-            \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) \
-            -print
-
-      - name: Locate Android Project
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/_android_project" \
-            -type f \
-            \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) \
-            -print -quit | xargs dirname)
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle tidak ditemukan."
-            find _android_project -maxdepth 6 -type f | head -200
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-          echo "Project Android ditemukan:"
-          echo "$PROJECT_DIR"
-
       - name: Build APK
+        working-directory: build-src
+        run: |
+          gradle --no-daemon assembleDebug
+
+      - name: Verify APK
         shell: bash
         run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          echo "Building dari:"
-          pwd
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug \
-              --no-daemon \
-              --stacktrace
-          else
-            gradle clean assembleDebug \
-              --no-daemon \
-              --stacktrace
-          fi
-
-      - name: Find APK
-        shell: bash
-        run: |
-          set -e
-
-          APK=$(find "$PROJECT_DIR" \
-            -type f \
-            -path '*/build/outputs/apk/debug/*.apk' \
-            -print -quit)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: Build selesai tetapi APK tidak ditemukan."
-            find "$PROJECT_DIR" -type f -name '*.apk' -print
-            exit 1
-          fi
-
-          echo "APK ditemukan:"
-          echo "$APK"
-
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
-
-          cp "$APK" \
-            "$GITHUB_WORKSPACE/apk-output/RNAUTOMAP-V11.1.12-debug.apk"
-
-          ls -lh \
-            "$GITHUB_WORKSPACE/apk-output/RNAUTOMAP-V11.1.12-debug.apk"
+          APK="build-src/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-V11.1.12-ECU-DATA-AUTOTUNE
-          path: apk-output/RNAUTOMAP-V11.1.12-debug.apk
+          name: RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX-APK
+          path: build-src/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
