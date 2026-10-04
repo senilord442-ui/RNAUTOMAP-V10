@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -30,23 +29,42 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Cari Android Project
+      - name: Extract Uploaded RNAUTOMAP ZIP
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          echo "=== CARI PROJECT ANDROID ==="
+          ZIP="$GITHUB_WORKSPACE/RNAUTOMAP-V11.1.13-ECU-LIVE-PROTOCOL-FIX (2).zip"
+          EXTRACT="$RUNNER_TEMP/rnautomat-source"
 
-          SETTINGS=$(find "$GITHUB_WORKSPACE" \
-            -type f \
+          echo "=== CEK ZIP ==="
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: ZIP source tidak ditemukan:"
+            echo "$ZIP"
+            echo ""
+            echo "File repository:"
+            find "$GITHUB_WORKSPACE" -maxdepth 2 -type f -printf '%P\n' | sort
+            exit 1
+          fi
+
+          rm -rf "$EXTRACT"
+          mkdir -p "$EXTRACT"
+
+          echo "ZIP ditemukan:"
+          ls -lh "$ZIP"
+
+          unzip -q "$ZIP" -d "$EXTRACT"
+
+          echo "=== CARI ANDROID PROJECT ==="
+
+          SETTINGS=$(find "$EXTRACT" -type f \
             \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle tidak ditemukan."
-            echo ""
-            echo "Isi repository:"
-            find "$GITHUB_WORKSPACE" -maxdepth 4 -type f | sort
+            echo "ERROR: settings.gradle tidak ditemukan setelah ZIP diekstrak."
+            find "$EXTRACT" -maxdepth 5 -type f | sort
             exit 1
           fi
 
@@ -60,59 +78,60 @@ jobs:
       - name: Cek Source RNAUTOMAP
         shell: bash
         run: |
-          set -e
-
+          set -euo pipefail
           cd "$PROJECT_DIR"
 
           echo "=== CEK SOURCE ==="
 
-          test -f settings.gradle
-          test -f build.gradle
-          test -f app/build.gradle
+          test -f settings.gradle || test -f settings.gradle.kts
+          test -f build.gradle || test -f build.gradle.kts
+          test -f app/build.gradle || test -f app/build.gradle.kts
           test -f app/src/main/AndroidManifest.xml
-          test -f app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          MAIN_ACTIVITY=$(find app/src/main/java \
+            -type f \
+            -name "MainActivity.java" \
+            -print -quit)
+
+          if [ -z "$MAIN_ACTIVITY" ]; then
+            echo "ERROR: MainActivity.java tidak ditemukan."
+            find app/src/main/java -type f | sort
+            exit 1
+          fi
+
           test -f app/src/main/assets/app.html
           test -f app/src/main/assets/kalkulator-peta-ecu.html
 
+          echo "MainActivity: $MAIN_ACTIVITY"
           echo "SOURCE OK"
 
       - name: Cek Protocol JUKEN
         shell: bash
         run: |
-          set -e
-
+          set -euo pipefail
           cd "$PROJECT_DIR"
+
+          MAIN_ACTIVITY=$(find app/src/main/java \
+            -type f \
+            -name "MainActivity.java" \
+            -print -quit)
 
           echo "=== CEK PROTOCOL JUKEN ==="
 
-          grep -q '00001101-0000-1000-8000-00805F9B34FB' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          grep -q '1606' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          grep -q '1616' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          grep -q '1500' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          grep -q '1B00' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          grep -q '160A' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-          grep -q '160B' \
-            app/src/main/java/com/rnautomap/juken/MainActivity.java
+          grep -q '00001101-0000-1000-8000-00805F9B34FB' "$MAIN_ACTIVITY"
+          grep -q '1606' "$MAIN_ACTIVITY"
+          grep -q '1616' "$MAIN_ACTIVITY"
+          grep -q '1500' "$MAIN_ACTIVITY"
+          grep -q '1B00' "$MAIN_ACTIVITY"
+          grep -q '160A' "$MAIN_ACTIVITY"
+          grep -q '160B' "$MAIN_ACTIVITY"
 
           echo "JUKEN PROTOCOL CHECK PASS"
 
       - name: Build APK
         shell: bash
         run: |
-          set -e
-
+          set -euo pipefail
           cd "$PROJECT_DIR"
 
           echo "=== BUILD APK ==="
@@ -124,12 +143,13 @@ jobs:
       - name: Verify APK
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
           if [ ! -s "$APK" ]; then
-            echo "ERROR: APK tidak ditemukan."
+            echo "ERROR: APK tidak ditemukan:"
+            echo "$APK"
             exit 1
           fi
 
