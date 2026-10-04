@@ -1,4 +1,4 @@
-name: Build RNAUTOMAP V11.1.12 FIX
+name: Build RNAUTOMAP V11.1.12 FIX2
 
 on:
   push:
@@ -17,12 +17,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract FIX source
+      - name: Extract FIX2 source
         shell: bash
         run: |
           rm -rf build-src
           mkdir -p build-src
-          unzip -q "RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX.zip" -d build-src
+
+          unzip -q "RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX2.zip" -d build-src
 
           test -f build-src/settings.gradle
           test -f build-src/app/build.gradle
@@ -39,7 +40,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
+      - name: Build FIX2 APK
         working-directory: build-src
         run: |
           gradle --no-daemon assembleDebug
@@ -51,10 +52,10 @@ jobs:
           test -s "$APK"
           ls -lh "$APK"
 
-      - name: Upload APK
+      - name: Upload FIX2 APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX-APK
+          name: RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX2-APK
           path: build-src/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
