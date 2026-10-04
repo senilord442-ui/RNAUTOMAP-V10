@@ -1,61 +1,191 @@
-name: Build RNAUTOMAP V11.1.12 FIX2
+name: Build RNAUTOMAP V11.1.13 ECU LIVE FIX
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build APK RNAUTOMAP V11.1.13
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Extract FIX2 source
-        shell: bash
-        run: |
-          rm -rf build-src
-          mkdir -p build-src
-
-          unzip -q "RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX2.zip" -d build-src
-
-          test -f build-src/settings.gradle
-          test -f build-src/app/build.gradle
-          test -f build-src/app/src/main/java/com/rnautomap/juken/MainActivity.java
-
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build FIX2 APK
-        working-directory: build-src
-        run: |
-          gradle --no-daemon assembleDebug
-
-      - name: Verify APK
+      - name: Cari Source V11.1.13
         shell: bash
         run: |
-          APK="build-src/app/build/outputs/apk/debug/app-debug.apk"
-          test -s "$APK"
+          set -e
+
+          echo "=== Mencari source RNAUTOMAP V11.1.13 ==="
+
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
+            -type f \
+            -name 'RNAUTOMAP-V11.1.13-ECU-LIVE-PROTOCOL-FIX.zip' \
+            | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: ZIP V11.1.13 tidak ditemukan."
+            echo ""
+            echo "File ZIP yang ditemukan:"
+            find "$GITHUB_WORKSPACE" -type f -name '*.zip' -print
+            exit 1
+          fi
+
+          echo "ZIP ditemukan:"
+          echo "$ZIP_FILE"
+
+          rm -rf "$GITHUB_WORKSPACE/source"
+          mkdir -p "$GITHUB_WORKSPACE/source"
+
+          unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/source"
+
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/source" \
+            -type f \
+            \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) \
+            -exec dirname {} \; \
+            | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle tidak ditemukan."
+            exit 1
+          fi
+
+          echo "Project:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Cek Source RNAUTOMAP
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "=== CEK FILE PROJECT ==="
+
+          test -f settings.gradle
+          test -f build.gradle
+          test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/java/com/rnautomap/juken/MainActivity.java
+          test -f app/src/main/assets/app.html
+          test -f app/src/main/assets/kalkulator-peta-ecu.html
+
+          echo "Semua file utama ditemukan."
+
+      - name: Cek Protocol JUKEN
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "=== CEK BLUETOOTH JUKEN ==="
+
+          grep -q '00001101-0000-1000-8000-00805F9B34FB' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "SPP UUID OK"
+
+          grep -q '160A' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "LIVE START 160A ditemukan"
+
+          grep -q '160B' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "LIVE STOP 160B ditemukan"
+
+          grep -q '1606' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "ECU IDENTIFICATION 1606 ditemukan"
+
+          grep -q '1616' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "ECU ID REQUEST 1616 ditemukan"
+
+          grep -q '1500' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "9500 response handling ditemukan"
+
+          grep -q '1B00' \
+            app/src/main/java/com/rnautomap/juken/MainActivity.java
+
+          echo "1B00 ditemukan"
+
+          echo "Protocol check PASS."
+
+      - name: Build Debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          set -e
+
+          echo "=== BUILD APK ==="
+
+          gradle clean assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Cari APK Hasil Build
+        shell: bash
+        run: |
+          set -e
+
+          echo "=== APK HASIL BUILD ==="
+
+          find "$PROJECT_DIR/app/build/outputs" \
+            -type f \
+            -name '*.apk' \
+            -print
+
+      - name: Pastikan APK Ada
+        shell: bash
+        run: |
+          set -e
+
+          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -s "$APK" ]; then
+            echo "ERROR: APK tidak ditemukan."
+            exit 1
+          fi
+
+          echo "APK ditemukan:"
           ls -lh "$APK"
 
-      - name: Upload FIX2 APK
+          echo ""
+          echo "SHA256:"
+          sha256sum "$APK"
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-V11.1.12-DATA-PARSER-TPS-FIX2-APK
-          path: build-src/app/build/outputs/apk/debug/app-debug.apk
+          name: RNAUTOMAP-V11.1.13-ECU-LIVE-PROTOCOL-FIX-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
