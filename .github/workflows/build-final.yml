@@ -1,172 +1,158 @@
-name: Build RNAUTOMAP V11.1.13 ECU LIVE FIX
+name: Build JUKEN MOD MAX APK
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    paths:
+      - "JUKEN-MOD-MAX-SOURCE.zip"
+      - ".github/workflows/build-juken-mod.yml"
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build RNAUTOMAP APK
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
+          cache: gradle
 
-      - name: Setup Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Extract Uploaded RNAUTOMAP ZIP
+      - name: Find source ZIP
+        id: findzip
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          ZIP="$GITHUB_WORKSPACE/RNAUTOMAP-V11.1.13-ECU-LIVE-PROTOCOL-FIX (2).zip"
-          EXTRACT="$RUNNER_TEMP/rnautomat-source"
+          ZIP="$(find . -maxdepth 3 -type f \
+            \( -iname 'JUKEN-MOD-MAX-SOURCE.zip' \
+            -o -iname '*JUKEN-MOD-MAX*.zip' \) \
+            | head -n 1)"
 
-          echo "=== CEK ZIP ==="
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: ZIP source tidak ditemukan:"
-            echo "$ZIP"
-            echo ""
-            echo "File repository:"
-            find "$GITHUB_WORKSPACE" -maxdepth 2 -type f -printf '%P\n' | sort
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: JUKEN MOD MAX ZIP tidak ditemukan."
+            echo "Isi repository:"
+            find . -maxdepth 3 -type f | sort
             exit 1
           fi
 
-          rm -rf "$EXTRACT"
-          mkdir -p "$EXTRACT"
+          echo "ZIP ditemukan: $ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
-          echo "ZIP ditemukan:"
-          ls -lh "$ZIP"
+      - name: Extract source
+        shell: bash
+        run: |
+          set -e
 
-          unzip -q "$ZIP" -d "$EXTRACT"
+          rm -rf "$RUNNER_TEMP/juken-source"
+          mkdir -p "$RUNNER_TEMP/juken-source"
 
-          echo "=== CARI ANDROID PROJECT ==="
+          unzip -q "${{ steps.findzip.outputs.zip }}" \
+            -d "$RUNNER_TEMP/juken-source"
 
-          SETTINGS=$(find "$EXTRACT" -type f \
-            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
-            -print -quit)
+          echo "Hasil extract:"
+          find "$RUNNER_TEMP/juken-source" -maxdepth 4 -type f | sort | head -200
+
+      - name: Locate Android project
+        id: project
+        shell: bash
+        run: |
+          set -e
+
+          ROOT="$RUNNER_TEMP/juken-source"
+
+          SETTINGS="$(find "$ROOT" -type f \
+            \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) \
+            | head -n 1)"
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle tidak ditemukan setelah ZIP diekstrak."
-            find "$EXTRACT" -maxdepth 5 -type f | sort
+            echo "ERROR: settings.gradle tidak ditemukan."
+            echo "Struktur source:"
+            find "$ROOT" -maxdepth 5 -type f | sort
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
+          PROJECT_DIR="$(dirname "$SETTINGS")"
 
-          echo "Project ditemukan:"
+          echo "Android project:"
           echo "$PROJECT_DIR"
 
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Cek Source RNAUTOMAP
+      - name: Verify Android project
+        working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
-
-          echo "=== CEK SOURCE ==="
+          set -e
 
           test -f settings.gradle || test -f settings.gradle.kts
-          test -f build.gradle || test -f build.gradle.kts
-          test -f app/build.gradle || test -f app/build.gradle.kts
-          test -f app/src/main/AndroidManifest.xml
 
-          MAIN_ACTIVITY=$(find app/src/main/java \
-            -type f \
-            -name "MainActivity.java" \
-            -print -quit)
-
-          if [ -z "$MAIN_ACTIVITY" ]; then
-            echo "ERROR: MainActivity.java tidak ditemukan."
-            find app/src/main/java -type f | sort
+          if [ ! -f gradlew ]; then
+            echo "gradlew tidak ditemukan."
+            echo "Isi project:"
+            find . -maxdepth 3 -type f | sort
             exit 1
           fi
 
-          test -f app/src/main/assets/app.html
-          test -f app/src/main/assets/kalkulator-peta-ecu.html
+          chmod +x gradlew
 
-          echo "MainActivity: $MAIN_ACTIVITY"
-          echo "SOURCE OK"
+          echo "Gradle:"
+          ./gradlew --version
 
-      - name: Cek Protocol JUKEN
+      - name: Build Debug APK
+        working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
+          set -e
 
-          MAIN_ACTIVITY=$(find app/src/main/java \
-            -type f \
-            -name "MainActivity.java" \
-            -print -quit)
+          chmod +x gradlew
 
-          echo "=== CEK PROTOCOL JUKEN ==="
-
-          grep -q '00001101-0000-1000-8000-00805F9B34FB' "$MAIN_ACTIVITY"
-          grep -q '1606' "$MAIN_ACTIVITY"
-          grep -q '1616' "$MAIN_ACTIVITY"
-          grep -q '1500' "$MAIN_ACTIVITY"
-          grep -q '1B00' "$MAIN_ACTIVITY"
-          grep -q '160A' "$MAIN_ACTIVITY"
-          grep -q '160B' "$MAIN_ACTIVITY"
-
-          echo "JUKEN PROTOCOL CHECK PASS"
-
-      - name: Build APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
-
-          echo "=== BUILD APK ==="
-
-          gradle clean assembleDebug \
+          ./gradlew clean assembleDebug \
             --no-daemon \
             --stacktrace
 
-      - name: Verify APK
+      - name: Find APK
+        id: apk
+        working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+          APK="$(find . -type f -name '*.apk' \
+            -path '*/build/outputs/apk/*' \
+            | head -n 1)"
 
-          if [ ! -s "$APK" ]; then
-            echo "ERROR: APK tidak ditemukan:"
-            echo "$APK"
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK tidak ditemukan."
+            find . -type f | grep -E '\.(apk|aab)$' || true
             exit 1
           fi
 
-          echo "================================"
-          echo "BUILD BERHASIL"
-          echo "================================"
+          echo "APK ditemukan:"
+          echo "$APK"
 
-          ls -lh "$APK"
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp "$APK" "$RUNNER_TEMP/apk/JUKEN-MOD-MAX-debug.apk"
 
-          echo ""
-          echo "SHA256:"
-          sha256sum "$APK"
+          echo "apk_path=$RUNNER_TEMP/apk/JUKEN-MOD-MAX-debug.apk" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: SHA256
+        shell: bash
+        run: |
+          sha256sum "${{ steps.apk.outputs.apk_path }}"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-V11.1.13-ECU-LIVE-PROTOCOL-FIX-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: JUKEN-MOD-MAX-APK
+          path: ${{ steps.apk.outputs.apk_path }}
           if-no-files-found: error
           retention-days: 30
