@@ -5,7 +5,7 @@ on:
   push:
     paths:
       - "JUKEN-MOD-MAX-SOURCE.zip"
-      - ".github/workflows/build-juken-mod.yml"
+      - ".github/workflows/build-final.yml"
 
 permissions:
   contents: read
@@ -19,34 +19,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
-      - name: Find source ZIP
-        id: findzip
+      - name: Find JUKEN MOD source ZIP
+        id: find_zip
         shell: bash
         run: |
           set -e
 
-          ZIP="$(find . -maxdepth 3 -type f \
+          ZIP="$(find . -type f \
             \( -iname 'JUKEN-MOD-MAX-SOURCE.zip' \
-            -o -iname '*JUKEN-MOD-MAX*.zip' \) \
-            | head -n 1)"
+            -o -iname '*JUKEN-MOD-MAX*.zip' \
+            \) | head -n 1)"
 
           if [ -z "$ZIP" ]; then
             echo "ERROR: JUKEN MOD MAX ZIP tidak ditemukan."
-            echo "Isi repository:"
-            find . -maxdepth 3 -type f | sort
+            echo "File repository:"
+            find . -maxdepth 4 -type f | sort
             exit 1
           fi
 
-          echo "ZIP ditemukan: $ZIP"
+          echo "ZIP ditemukan:"
+          echo "$ZIP"
+
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
-      - name: Extract source
+      - name: Extract JUKEN MOD source
         shell: bash
         run: |
           set -e
@@ -54,56 +55,53 @@ jobs:
           rm -rf "$RUNNER_TEMP/juken-source"
           mkdir -p "$RUNNER_TEMP/juken-source"
 
-          unzip -q "${{ steps.findzip.outputs.zip }}" \
+          unzip -q "${{ steps.find_zip.outputs.zip }}" \
             -d "$RUNNER_TEMP/juken-source"
 
-          echo "Hasil extract:"
-          find "$RUNNER_TEMP/juken-source" -maxdepth 4 -type f | sort | head -200
+          echo "Source hasil extract:"
+          find "$RUNNER_TEMP/juken-source" -maxdepth 5 -type f | sort
 
-      - name: Locate Android project
+      - name: Find Android project
         id: project
         shell: bash
         run: |
           set -e
 
-          ROOT="$RUNNER_TEMP/juken-source"
-
-          SETTINGS="$(find "$ROOT" -type f \
+          SETTINGS="$(find "$RUNNER_TEMP/juken-source" \
+            -type f \
             \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) \
             | head -n 1)"
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: settings.gradle tidak ditemukan."
             echo "Struktur source:"
-            find "$ROOT" -maxdepth 5 -type f | sort
+            find "$RUNNER_TEMP/juken-source" -maxdepth 6 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS")"
 
-          echo "Android project:"
+          echo "Android project ditemukan:"
           echo "$PROJECT_DIR"
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Android project
+      - name: Check Gradle project
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
           set -e
 
-          test -f settings.gradle || test -f settings.gradle.kts
-
           if [ ! -f gradlew ]; then
-            echo "gradlew tidak ditemukan."
+            echo "ERROR: gradlew tidak ditemukan."
             echo "Isi project:"
-            find . -maxdepth 3 -type f | sort
+            find . -maxdepth 4 -type f | sort
             exit 1
           fi
 
           chmod +x gradlew
 
-          echo "Gradle:"
+          echo "Gradle version:"
           ./gradlew --version
 
       - name: Build Debug APK
@@ -119,40 +117,52 @@ jobs:
             --stacktrace
 
       - name: Find APK
-        id: apk
+        id: find_apk
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
           set -e
 
-          APK="$(find . -type f -name '*.apk' \
+          APK="$(find . \
+            -type f \
+            -name '*.apk' \
             -path '*/build/outputs/apk/*' \
             | head -n 1)"
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK tidak ditemukan."
-            find . -type f | grep -E '\.(apk|aab)$' || true
+            find . -type f | sort
             exit 1
           fi
 
           echo "APK ditemukan:"
           echo "$APK"
 
-          mkdir -p "$RUNNER_TEMP/apk"
-          cp "$APK" "$RUNNER_TEMP/apk/JUKEN-MOD-MAX-debug.apk"
+          mkdir -p "$RUNNER_TEMP/final-apk"
 
-          echo "apk_path=$RUNNER_TEMP/apk/JUKEN-MOD-MAX-debug.apk" \
+          cp "$APK" \
+            "$RUNNER_TEMP/final-apk/JUKEN-MOD-MAX-debug.apk"
+
+          echo "apk=$RUNNER_TEMP/final-apk/JUKEN-MOD-MAX-debug.apk" \
             >> "$GITHUB_OUTPUT"
 
-      - name: SHA256
+      - name: Verify APK
         shell: bash
         run: |
-          sha256sum "${{ steps.apk.outputs.apk_path }}"
+          set -e
+
+          APK="${{ steps.find_apk.outputs.apk }}"
+
+          echo "APK:"
+          ls -lh "$APK"
+
+          echo "SHA256:"
+          sha256sum "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: JUKEN-MOD-MAX-APK
-          path: ${{ steps.apk.outputs.apk_path }}
+          path: ${{ steps.find_apk.outputs.apk }}
           if-no-files-found: error
           retention-days: 30
