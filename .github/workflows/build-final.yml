@@ -31,32 +31,93 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Check project
+      - name: Prepare Android Project
         shell: bash
         run: |
           set -e
 
-          echo "=== ROOT ==="
-          ls -la
+          echo "======================================"
+          echo "RNAUTOMAP - PREPARE PROJECT"
+          echo "======================================"
 
-          echo "=== APP ==="
-          ls -la app
+          echo "=== Repository root ==="
+          ls -lah
 
-          test -f settings.gradle
-          test -f build.gradle
-          test -f app/build.gradle
-          test -f app/src/main/AndroidManifest.xml
+          mkdir -p _source
 
-          echo "Project structure OK"
+          ZIP=$(find . -maxdepth 2 -type f -iname "*.zip" | head -1)
 
-      - name: Check JUKEN protocol
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: ZIP project tidak ditemukan."
+            exit 1
+          fi
+
+          echo "ZIP ditemukan:"
+          echo "$ZIP"
+
+          unzip -o "$ZIP" -d _source
+
+          echo "=== Hasil extract ==="
+          find _source -maxdepth 4 -type f \
+            \( -name "settings.gradle" -o -name "build.gradle" -o -name "app.gradle" \) \
+            -print
+
+          PROJECT_DIR=""
+
+          while IFS= read -r SETTINGS; do
+            DIR=$(dirname "$SETTINGS")
+
+            if [ -f "$DIR/settings.gradle" ] &&
+               [ -f "$DIR/build.gradle" ] &&
+               [ -d "$DIR/app" ]; then
+              PROJECT_DIR="$DIR"
+              break
+            fi
+          done < <(find _source -type f -name "settings.gradle")
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Folder project Android tidak ditemukan."
+            echo ""
+            echo "Struktur hasil extract:"
+            find _source -maxdepth 5 -type d -print
+            exit 1
+          fi
+
+          echo "Project ditemukan:"
+          echo "$PROJECT_DIR"
+
+          rm -rf android-project
+          mkdir -p android-project
+
+          cp -a "$PROJECT_DIR"/. android-project/
+
+          echo "=== Project siap ==="
+          ls -lah android-project
+          ls -lah android-project/app
+
+          test -f android-project/settings.gradle
+          test -f android-project/build.gradle
+          test -f android-project/app/build.gradle
+          test -f android-project/app/src/main/AndroidManifest.xml
+
+          echo "PROJECT STRUCTURE OK"
+
+      - name: Check JUKEN Protocol
         shell: bash
         run: |
           set -e
+
+          cd android-project
 
           MAIN=$(find app/src/main/java -name "MainActivity.java" | head -1)
 
-          test -n "$MAIN"
+          if [ -z "$MAIN" ]; then
+            echo "ERROR: MainActivity.java tidak ditemukan."
+            exit 1
+          fi
+
+          echo "MainActivity:"
+          echo "$MAIN"
 
           grep -q "00001101-0000-1000-8000-00805F9B34FB" "$MAIN"
           grep -q "createBond" "$MAIN"
@@ -64,12 +125,38 @@ jobs:
           grep -q "160A" "$MAIN"
           grep -q "160B" "$MAIN"
 
-          echo "JUKEN protocol checks PASS"
+          echo "JUKEN PROTOCOL CHECK PASS"
+
+      - name: Check Calculator and UI
+        shell: bash
+        run: |
+          set -e
+
+          cd android-project
+
+          echo "=== HTML files ==="
+          find app/src/main/assets -maxdepth 2 -type f -print || true
+
+          if [ -f app/src/main/assets/app.html ]; then
+            grep -q "3D\|3d\|draw3d" app/src/main/assets/app.html || true
+          fi
+
+          if [ -f app/src/main/assets/kalkulator-peta-ecu.html ]; then
+            echo "Calculator ditemukan."
+          fi
+
+          echo "UI/CALCULATOR CHECK PASS"
 
       - name: Build APK
         shell: bash
         run: |
           set -e
+
+          cd android-project
+
+          echo "======================================"
+          echo "BUILD RNAUTOMAP APK"
+          echo "======================================"
 
           gradle clean assembleDebug \
             --no-daemon \
@@ -80,23 +167,30 @@ jobs:
         run: |
           set -e
 
+          cd android-project
+
           echo "=== APK FILES ==="
+
           find app/build/outputs -type f -name "*.apk" -print
 
           APK=$(find app/build/outputs -type f -name "*.apk" | head -1)
 
           if [ -z "$APK" ]; then
-            echo "APK tidak ditemukan"
+            echo "ERROR: APK tidak ditemukan."
             exit 1
           fi
 
-          echo "APK ditemukan:"
+          echo ""
+          echo "APK BERHASIL DIBUAT:"
           echo "$APK"
+
+          mkdir -p ../final-apk
+          cp "$APK" ../final-apk/RNAUTOMAP-JUKEN-V11.1.16.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: RNAUTOMAP-JUKEN-V11.1.16-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: final-apk/RNAUTOMAP-JUKEN-V11.1.16.apk
           if-no-files-found: error
           retention-days: 30
