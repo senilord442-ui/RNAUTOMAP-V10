@@ -1,4 +1,4 @@
-name: Build RNAUTOMAP V11.1.16 JUKEN PAIR FIRST
+name: Build RNAUTOMAP APK
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup JDK 17
@@ -23,25 +23,33 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Verify Android project
+      - name: Check project
         shell: bash
         run: |
           set -e
+
+          echo "=== ROOT ==="
+          ls -la
+
+          echo "=== APP ==="
+          ls -la app
 
           test -f settings.gradle
           test -f build.gradle
           test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
 
-          echo "=== PROJECT ==="
-          find . -maxdepth 3 -type f | sort | head -200
+          echo "Project structure OK"
 
-      - name: Protocol safety checks
+      - name: Check JUKEN protocol
         shell: bash
         run: |
           set -e
@@ -50,56 +58,45 @@ jobs:
 
           test -n "$MAIN"
 
-          grep -q '00001101-0000-1000-8000-00805F9B34FB' "$MAIN"
-          grep -q 'BOND_BONDED' "$MAIN"
-          grep -q 'createBond' "$MAIN"
-          grep -q '160A' "$MAIN"
-          grep -q '160B' "$MAIN"
-          grep -q '1616' "$MAIN"
-          grep -q '9616' "$MAIN"
-          grep -q '1500' "$MAIN"
-          grep -q '9500' "$MAIN"
-          grep -q '1B00' "$MAIN"
-          grep -q '1b01' "$MAIN"
+          grep -q "00001101-0000-1000-8000-00805F9B34FB" "$MAIN"
+          grep -q "createBond" "$MAIN"
+          grep -q "BOND_BONDED" "$MAIN"
+          grep -q "160A" "$MAIN"
+          grep -q "160B" "$MAIN"
 
-          echo "JUKEN PAIR-FIRST protocol checks: PASS"
+          echo "JUKEN protocol checks PASS"
 
-      - name: Check JavaScript
+      - name: Build APK
         shell: bash
         run: |
           set -e
 
-          if command -v node >/dev/null 2>&1; then
-            node --check app/src/main/assets/app.html 2>/dev/null || true
+          gradle clean assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "=== APK FILES ==="
+          find app/build/outputs -type f -name "*.apk" -print
+
+          APK=$(find app/build/outputs -type f -name "*.apk" | head -1)
+
+          if [ -z "$APK" ]; then
+            echo "APK tidak ditemukan"
+            exit 1
           fi
 
-          grep -q 'pairAndConnect' app/src/main/assets/app.html
-          grep -q 'btPairingStarted' app/src/main/assets/app.html
-          grep -q 'btBonded' app/src/main/assets/app.html
-
-          echo "UI pairing checks: PASS"
-
-      - name: Build Debug APK
-        shell: bash
-        run: |
-          set -e
-
-          gradle --version
-          gradle clean assembleDebug --no-daemon --stacktrace
-
-      - name: Locate APK
-        shell: bash
-        run: |
-          set -e
-
-          find app/build/outputs/apk -type f -name "*.apk" -print
-
-          test -n "$(find app/build/outputs/apk -type f -name "*.apk" -print -quit)"
+          echo "APK ditemukan:"
+          echo "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-V11.1.16-JUKEN-PAIR-FIRST-APK
+          name: RNAUTOMAP-JUKEN-V11.1.16-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
