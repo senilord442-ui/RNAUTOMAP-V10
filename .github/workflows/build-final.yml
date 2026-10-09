@@ -1,5 +1,5 @@
 
-name: Build RNAUTOMAP V11.1.21
+name: Build RNAUTOMAP V11.1.22
 
 on:
   workflow_dispatch:
@@ -38,11 +38,11 @@ jobs:
           set -euo pipefail
 
           ZIP=$(find . -maxdepth 2 -type f \
-            -name 'RNAUTOMAP-V11.1.21-BASEMAP-SURFACE-COLOR*.zip' \
+            -name 'RNAUTOMAP-V11.1.22-SPARSE-GRID*.zip' \
             -print -quit)
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: ZIP V11.1.21 tidak ditemukan"
+            echo "ERROR: ZIP V11.1.22 tidak ditemukan"
             exit 1
           fi
 
@@ -124,13 +124,13 @@ jobs:
           fi
 
           mkdir -p final-apk
-          cp "$APK" final-apk/RNAUTOMAP-V11.1.21.apk
-          sha256sum final-apk/RNAUTOMAP-V11.1.21.apk
+          cp "$APK" final-apk/RNAUTOMAP-V11.1.22.apk
+          sha256sum final-apk/RNAUTOMAP-V11.1.22.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RNAUTOMAP-V11.1.21-APK
-          path: final-apk/RNAUTOMAP-V11.1.21.apk
+          name: RNAUTOMAP-V11.1.22-APK
+          path: final-apk/RNAUTOMAP-V11.1.22.apk
           if-no-files-found: error
           retention-days: 30
