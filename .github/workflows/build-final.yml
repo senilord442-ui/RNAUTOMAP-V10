@@ -13,7 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -27,7 +26,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Setup Gradle 8.9
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -36,10 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          ZIP=$(find . -maxdepth 2 -type f \
-            -name 'RNAUTOMAP-V11.1.18-MAX-GRAPHICS-EXPORT*.zip' \
-            -print -quit)
+          ZIP=$(find . -maxdepth 2 -type f -name 'RNAUTOMAP-V11.1.18-MAX-GRAPHICS-EXPORT*.zip' -print -quit)
 
           if [ -z "$ZIP" ]; then
             echo "ERROR: ZIP project tidak ditemukan"
@@ -48,17 +44,15 @@ jobs:
 
           mkdir -p _source
           unzip -oq "$ZIP" -d _source
-
           PROJECT=""
+
           while IFS= read -r FILE; do
             DIR=$(dirname "$FILE")
-            if [ -f "$DIR/build.gradle" ] &&
-               [ -f "$DIR/app/build.gradle" ] &&
-               [ -f "$DIR/app/src/main/AndroidManifest.xml" ]; then
+            if { [ -f "$DIR/app/build.gradle" ] || [ -f "$DIR/app/build.gradle.kts" ]; } && [ -f "$DIR/app/src/main/AndroidManifest.xml" ]; then
               PROJECT="$DIR"
               break
             fi
-          done < <(find _source -type f -name settings.gradle)
+          done < <(find _source -type f \( -name settings.gradle -o -name settings.gradle.kts \))
 
           if [ -z "$PROJECT" ]; then
             echo "ERROR: Struktur project Android tidak ditemukan"
@@ -68,22 +62,18 @@ jobs:
 
           mkdir -p android-project
           cp -a "$PROJECT"/. android-project/
-
-          echo "PROJECT_DIR=$GITHUB_WORKSPACE/android-project" \
-            >> "$GITHUB_ENV"
-
-          echo "Project ditemukan: $PROJECT"
+          echo "PROJECT_DIR=$GITHUB_WORKSPACE/android-project" >> "$GITHUB_ENV"
 
       - name: Verify Project
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-
-          test -f settings.gradle
-          test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
-
+          if [ ! -f app/build.gradle ] && [ ! -f app/build.gradle.kts ]; then
+            echo "ERROR: Gradle app tidak ditemukan"
+            exit 1
+          fi
           echo "Project structure PASS"
 
       - name: Build APK
@@ -91,27 +81,19 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-
-          gradle clean assembleDebug \
-            --no-daemon \
-            --stacktrace
+          gradle clean assembleDebug --no-daemon --stacktrace
 
       - name: Prepare APK
         shell: bash
         run: |
           set -euo pipefail
-
-          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" \
-            -type f -name '*.apk' -print -quit)
-
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -type f -name '*.apk' -print -quit)
           if [ -z "$APK" ]; then
             echo "ERROR: APK tidak ditemukan"
             exit 1
           fi
-
           mkdir -p final-apk
           cp "$APK" final-apk/RNAUTOMAP-V11.1.18.apk
-          sha256sum final-apk/RNAUTOMAP-V11.1.18.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -120,4 +102,3 @@ jobs:
           path: final-apk/RNAUTOMAP-V11.1.18.apk
           if-no-files-found: error
           retention-days: 30
-```
